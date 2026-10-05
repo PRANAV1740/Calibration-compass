@@ -1,0 +1,7 @@
+circuit_id,condition,oracle_backend,esp_backend,ml_backend,ml_no_backend,esp_correct,ml_correct,ml_no_backend_correct
+24,combined_4x,Fez,Fez,Fez,Fez,True,True,True
+25,combined_4x,Fez,Fez,Fez,Fez,True,True,True
+26,combined_4x,Fez,Fez,Fez,Fez,True,True,True
+27,combined_4x,Fez,Fez,Fez,Fez,True,True,True
+28,combined_4x,Fez,Fez,Fez,Fez,True,True,True
+29,combined_4x,Fez,Fez,Fez,Fez,True,True,True

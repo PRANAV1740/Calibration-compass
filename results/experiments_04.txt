@@ -1,0 +1,46 @@
+CalibrationCompass - Experiment 4
+
+Experiment:
+Multi-circuit fidelity benchmark
+
+Circuits:
+GHZ
+QFT-like
+QAOA-like
+Hardware-efficient
+
+Backends:
+FakeSherbrooke
+FakeTorino
+FakeFez
+
+Results:
+
+GHZ:
+Sherbrooke = 0.911096
+Torino = 0.751756
+Fez = 0.943208
+Winner = Fez
+
+QFT-like:
+Sherbrooke = 0.999543
+Torino = 0.998637
+Fez = 0.998643
+Winner = Sherbrooke
+
+QAOA-like:
+Sherbrooke = 0.993696
+Torino = 0.994210
+Fez = 0.996194
+Winner = Fez
+
+Hardware-efficient:
+Sherbrooke = 0.989674
+Torino = 0.953178
+Fez = 0.997277
+Winner = Fez
+
+Main observation:
+Different circuit structures can have different backend performance.
+The results also show that circuit depth and two-qubit gate count
+alone do not completely determine execution fidelity.

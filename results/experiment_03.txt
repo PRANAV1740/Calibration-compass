@@ -1,0 +1,56 @@
+CalibrationCompass - Experiment 3
+
+Experiment:
+Synthetic calibration drift sweep
+
+Circuit:
+3-qubit GHZ
+
+Backend affected:
+FakeFez
+
+Affected qubit:
+Qubit 1
+
+Property changed:
+Readout error
+
+Drift factors:
+1x, 2x, 4x, 8x, 16x
+
+Results:
+
+1x:
+Sherbrooke = 0.9385
+Torino = 0.7885
+Fez = 0.9615
+Winner = Fez
+
+2x:
+Sherbrooke = 0.9240
+Torino = 0.7670
+Fez = 0.9500
+Winner = Fez
+
+4x:
+Sherbrooke = 0.9265
+Torino = 0.7685
+Fez = 0.9245
+Winner = Sherbrooke
+
+8x:
+Sherbrooke = 0.9215
+Torino = 0.7765
+Fez = 0.8895
+Winner = Sherbrooke
+
+16x:
+Sherbrooke = 0.9320
+Torino = 0.7620
+Fez = 0.7895
+Winner = Sherbrooke
+
+Main observation:
+The optimal backend changes as hardware calibration conditions
+change. Fez is best under normal conditions, but Sherbrooke
+becomes better after sufficient degradation of Fez qubit 1.
