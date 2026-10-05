@@ -1,0 +1,31 @@
+CalibrationCompass - Experiment 2
+
+Circuit:
+3-qubit GHZ
+
+Backends tested:
+FakeSherbrooke
+FakeTorino
+FakeFez
+
+Results:
+
+FakeSherbrooke
+Success probability: 93.00%
+Depth: 9
+Two-qubit gates: 2
+
+FakeTorino
+Success probability: 75.80%
+Depth: 12
+Two-qubit gates: 2
+
+FakeFez
+Success probability: 96.25%
+Depth: 12
+Two-qubit gates: 2
+
+Main observation:
+The same quantum circuit performs very differently on different
+IBM-like backends. Backend choice therefore has a significant
+impact on execution quality.
