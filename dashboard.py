@@ -7,11 +7,8 @@ import streamlit as st
 from qiskit import transpile
 from qiskit.qasm2 import loads as qasm2_loads
 from qiskit_ibm_runtime import QiskitRuntimeService
+from qpu_executor import submit_to_qpu, get_qpu_result
 
-
-# ============================================================
-# PAGE
-# ============================================================
 
 st.set_page_config(
     page_title="CalibrationCompass",
@@ -19,59 +16,32 @@ st.set_page_config(
     layout="wide"
 )
 
-
-# ============================================================
-# STYLE
-# ============================================================
-
 st.markdown(
     """
     <style>
-    .main-title {
-        font-size: 2.5rem;
-        font-weight: 800;
-        margin-bottom: 0;
-    }
-
-    .subtitle {
-        font-size: 1rem;
-        opacity: 0.7;
-        margin-bottom: 1.5rem;
-    }
-
+    .main-title { font-size: 2.5rem; font-weight: 800; margin-bottom: 0; }
+    .subtitle { font-size: 1rem; opacity: 0.7; margin-bottom: 1.5rem; }
     .recommendation {
         padding: 1.3rem;
         border-radius: 15px;
         border: 1px solid rgba(100, 150, 255, 0.35);
         background: rgba(80, 120, 220, 0.08);
     }
-
     .recommendation-label {
         font-size: 0.75rem;
         opacity: 0.65;
         text-transform: uppercase;
         letter-spacing: 0.08em;
     }
-
     .recommendation-main {
         font-size: 1.8rem;
         font-weight: 800;
         margin-top: 0.3rem;
     }
-
-    .confidence {
-        font-size: 1.3rem;
-        font-weight: 700;
-    }
     </style>
     """,
     unsafe_allow_html=True
 )
-
-
-# ============================================================
-# CONFIG
-# ============================================================
 
 BACKENDS = [
     "ibm_fez",
@@ -79,32 +49,79 @@ BACKENDS = [
     "ibm_marrakesh"
 ]
 
-SEEDS = [
-    11, 22, 33, 44, 55, 66
-]
+BELL_QASM = """OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[2];
+creg c[2];
+h q[0];
+cx q[0],q[1];
+measure q[0] -> c[0];
+measure q[1] -> c[1];"""
+
+GHZ_QASM = """OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[3];
+creg c[3];
+h q[0];
+cx q[0],q[1];
+cx q[1],q[2];
+measure q[0] -> c[0];
+measure q[1] -> c[1];
+measure q[2] -> c[2];"""
+
+RING_QASM = """OPENQASM 2.0;
+include "qelib1.inc";
+qreg q[3];
+creg c[3];
+h q[0];
+cx q[0],q[1];
+cx q[1],q[2];
+cx q[2],q[0];
+measure q[0] -> c[0];
+measure q[1] -> c[1];
+measure q[2] -> c[2];"""
 
 
-# ============================================================
-# IBM SERVICE
-# ============================================================
+if "qasm_text" not in st.session_state:
+    st.session_state.qasm_text = GHZ_QASM
+
+if "analysis_results" not in st.session_state:
+    st.session_state.analysis_results = pd.DataFrame()
+
+if "analysis_status" not in st.session_state:
+    st.session_state.analysis_status = pd.DataFrame()
+
+if "analysis_circuit" not in st.session_state:
+    st.session_state.analysis_circuit = None
+
+if "analysis_qasm" not in st.session_state:
+    st.session_state.analysis_qasm = ""
+
+if "qpu_job_id" not in st.session_state:
+    st.session_state.qpu_job_id = None
+
+if "uploaded_signature" not in st.session_state:
+    st.session_state.uploaded_signature = ""
+
+
+def set_circuit(qasm):
+    st.session_state.qasm_text = qasm
+    st.session_state.analysis_results = pd.DataFrame()
+    st.session_state.analysis_status = pd.DataFrame()
+    st.session_state.analysis_circuit = None
+    st.session_state.analysis_qasm = ""
+    st.session_state.qpu_job_id = None
+
 
 @st.cache_resource
 def get_service():
-
     return QiskitRuntimeService(
         channel="ibm_quantum_platform",
         instance="open-instance"
     )
 
 
-# ============================================================
-# CANDIDATE ANALYSIS
-# ============================================================
-
-def analyze_candidate(
-    compiled,
-    props
-):
+def analyze_candidate(compiled, props):
 
     used_qubits = set()
     measured_qubits = set()
@@ -119,19 +136,19 @@ def analyze_candidate(
     for item in compiled.data:
 
         operation = item.operation
-        qargs = item.qubits
-
-        name = operation.name.lower()
 
         physical = [
             compiled.find_bit(q).index
-            for q in qargs
+            for q in item.qubits
         ]
+
+        name = operation.name.lower()
 
         if name == "measure":
 
-            for q in physical:
-                measured_qubits.add(q)
+            measured_qubits.update(
+                physical
+            )
 
             continue
 
@@ -140,10 +157,12 @@ def analyze_candidate(
             "delay",
             "reset"
         ]:
+
             continue
 
-        for q in physical:
-            used_qubits.add(q)
+        used_qubits.update(
+            physical
+        )
 
         gate_count += 1
 
@@ -171,64 +190,62 @@ def analyze_candidate(
 
         if error is not None:
 
-            gate_errors.append(error)
+            gate_errors.append(
+                error
+            )
 
             if len(physical) == 2:
-                two_q_errors.append(error)
 
-    # --------------------------------------------------------
-    # Readout
-    # --------------------------------------------------------
+                two_q_errors.append(
+                    error
+                )
 
     readout_targets = (
         measured_qubits
-        if measured_qubits
-        else used_qubits
+        or used_qubits
     )
 
     readout_errors = []
 
-    for q in sorted(readout_targets):
+    for q in sorted(
+        readout_targets
+    ):
 
         try:
 
-            error = props.readout_error(q)
+            error = props.readout_error(
+                q
+            )
 
         except Exception:
 
             error = None
 
         if error is not None:
-            readout_errors.append(error)
 
-    if readout_errors:
-
-        readout_success = 1.0
-
-        for error in readout_errors:
-
-            readout_success *= (
-                1.0 - error
+            readout_errors.append(
+                error
             )
 
-        readout_loss = (
-            1.0
-            -
-            readout_success
+    readout_success = 1.0
+
+    for error in readout_errors:
+
+        readout_success *= (
+            1.0 - error
         )
 
-        max_readout = max(
-            readout_errors
-        )
+    readout_loss = (
+        1.0
+        -
+        readout_success
+    )
 
-    else:
-
-        readout_loss = 0.0
-        max_readout = 0.0
-
-    # --------------------------------------------------------
-    # Gate
-    # --------------------------------------------------------
+    max_readout = (
+        max(readout_errors)
+        if readout_errors
+        else 0.0
+    )
 
     gate_success = 1.0
 
@@ -243,10 +260,6 @@ def analyze_candidate(
         -
         gate_success
     )
-
-    # --------------------------------------------------------
-    # Combined risk
-    # --------------------------------------------------------
 
     combined_risk = (
         1.0
@@ -297,10 +310,6 @@ def analyze_candidate(
     }
 
 
-# ============================================================
-# LIVE ANALYSIS
-# ============================================================
-
 def analyze_backends(
     circuit,
     backend_names
@@ -308,8 +317,21 @@ def analyze_backends(
 
     service = get_service()
 
-    results = []
+    fast_seeds = [
+        11,
+        33,
+        55
+    ]
+
+    stage1_results = []
+    final_results = []
     status_rows = []
+
+    backend_data = {}
+
+    # ========================================================
+    # STAGE 1
+    # ========================================================
 
     for backend_name in backend_names:
 
@@ -335,23 +357,56 @@ def analyze_backends(
                     status.pending_jobs
             })
 
-            if not status.operational:
-                continue
-
             if (
+                not status.operational
+                or
                 circuit.num_qubits
                 >
                 backend.num_qubits
             ):
+
                 continue
 
             props = backend.properties(
                 refresh=True
             )
 
-            calibration_time = (
-                props.last_update_date
+            backend_data[
+                backend_name
+            ] = (
+                backend,
+                props
             )
+
+            for seed in fast_seeds:
+
+                try:
+
+                    compiled = transpile(
+                        circuit,
+                        backend=backend,
+                        optimization_level=1,
+                        layout_method="sabre",
+                        routing_method="sabre",
+                        seed_transpiler=seed
+                    )
+
+                    stage1_results.append({
+                        "backend":
+                            backend_name,
+
+                        "candidate":
+                            seed,
+
+                        **analyze_candidate(
+                            compiled,
+                            props
+                        )
+                    })
+
+                except Exception:
+
+                    continue
 
         except Exception as exc:
 
@@ -369,79 +424,126 @@ def analyze_backends(
                     None
             })
 
-            continue
+    if not stage1_results:
 
-        for seed in SEEDS:
+        return (
+            pd.DataFrame(),
+            pd.DataFrame(
+                status_rows
+            )
+        )
 
-            try:
+    # ========================================================
+    # STAGE 2
+    # ========================================================
 
-                compiled = transpile(
-                    circuit,
-                    backend=backend,
-                    optimization_level=3,
-                    layout_method="sabre",
-                    routing_method="sabre",
-                    seed_transpiler=seed
+    stage1_df = pd.DataFrame(
+        stage1_results
+    )
+
+    shortlist = (
+        stage1_df
+        .sort_values(
+            "combined_risk"
+        )
+        .groupby(
+            "backend"
+        )
+        .head(1)
+        .copy()
+    )
+
+    for _, candidate in (
+        shortlist.iterrows()
+    ):
+
+        backend_name = (
+            candidate["backend"]
+        )
+
+        seed = int(
+            candidate["candidate"]
+        )
+
+        try:
+
+            backend, props = (
+                backend_data[
+                    backend_name
+                ]
+            )
+
+            compiled = transpile(
+                circuit,
+                backend=backend,
+                optimization_level=3,
+                layout_method="sabre",
+                routing_method="sabre",
+                seed_transpiler=seed
+            )
+
+            calibration_time = (
+                props.last_update_date
+            )
+
+            if calibration_time is not None:
+
+                timestamp = (
+                    calibration_time
                 )
 
-                features = analyze_candidate(
+                if timestamp.tzinfo is None:
+
+                    timestamp = (
+                        timestamp.replace(
+                            tzinfo=timezone.utc
+                        )
+                    )
+
+                age_minutes = (
+                    datetime.now(
+                        timezone.utc
+                    )
+                    -
+                    timestamp
+                ).total_seconds() / 60.0
+
+            else:
+
+                age_minutes = math.nan
+
+            final_results.append({
+                "backend":
+                    backend_name,
+
+                "candidate":
+                    seed,
+
+                "calibration_time":
+                    str(
+                        calibration_time
+                    ),
+
+                "calibration_age":
+                    age_minutes,
+
+                **analyze_candidate(
                     compiled,
                     props
                 )
+            })
 
-                if calibration_time is not None:
+        except Exception:
 
-                    now = datetime.now(
-                        timezone.utc
-                    )
-
-                    calibration_timestamp = (
-                        calibration_time
-                    )
-
-                    if (
-                        calibration_timestamp.tzinfo
-                        is None
-                    ):
-
-                        calibration_timestamp = (
-                            calibration_timestamp.replace(
-                                tzinfo=timezone.utc
-                            )
-                        )
-
-                    age_minutes = (
-                        now
-                        -
-                        calibration_timestamp
-                    ).total_seconds() / 60.0
-
-                else:
-
-                    age_minutes = math.nan
-
-                results.append({
-                    "backend":
-                        backend_name,
-
-                    "candidate":
-                        seed,
-
-                    "calibration_time":
-                        str(calibration_time),
-
-                    "calibration_age":
-                        age_minutes,
-
-                    **features
-                })
-
-            except Exception:
-                continue
+            continue
 
     return (
-        pd.DataFrame(results),
-        pd.DataFrame(status_rows)
+        pd.DataFrame(
+            final_results
+        ),
+        pd.DataFrame(
+            status_rows
+        )
     )
 
 
@@ -450,7 +552,9 @@ def analyze_backends(
 # ============================================================
 
 st.markdown(
-    '<div class="main-title">🧭 CalibrationCompass</div>',
+    '<div class="main-title">'
+    '🧭 CalibrationCompass'
+    '</div>',
     unsafe_allow_html=True
 )
 
@@ -463,25 +567,91 @@ st.markdown(
 
 
 # ============================================================
-# INPUT
+# CIRCUIT
 # ============================================================
 
-st.subheader("1. Quantum Circuit")
+st.subheader(
+    "1. Quantum Circuit"
+)
 
-default_qasm = """OPENQASM 2.0;
-include "qelib1.inc";
-qreg q[3];
-creg c[3];
-h q[0];
-cx q[0],q[1];
-cx q[1],q[2];
-measure q[0] -> c[0];
-measure q[1] -> c[1];
-measure q[2] -> c[2];"""
+b1, b2, b3, b4 = st.columns(4)
+
+with b1:
+
+    st.button(
+        "Bell",
+        on_click=set_circuit,
+        args=(BELL_QASM,)
+    )
+
+with b2:
+
+    st.button(
+        "GHZ",
+        on_click=set_circuit,
+        args=(GHZ_QASM,)
+    )
+
+with b3:
+
+    st.button(
+        "Ring",
+        on_click=set_circuit,
+        args=(RING_QASM,)
+    )
+
+with b4:
+
+    uploaded = st.file_uploader(
+        "Upload .qasm",
+        type=["qasm"]
+    )
+
+if uploaded is not None:
+
+    uploaded_text = (
+        uploaded
+        .read()
+        .decode("utf-8")
+    )
+
+    if (
+        st.session_state.uploaded_signature
+        !=
+        uploaded_text
+    ):
+
+        st.session_state.qasm_text = (
+            uploaded_text
+        )
+
+        st.session_state.uploaded_signature = (
+            uploaded_text
+        )
+
+        st.session_state.analysis_results = (
+            pd.DataFrame()
+        )
+
+        st.session_state.analysis_status = (
+            pd.DataFrame()
+        )
+
+        st.session_state.analysis_circuit = (
+            None
+        )
+
+        st.session_state.analysis_qasm = (
+            ""
+        )
+
+        st.session_state.qpu_job_id = (
+            None
+        )
 
 qasm_text = st.text_area(
     "OpenQASM 2.0",
-    value=default_qasm,
+    key="qasm_text",
     height=240
 )
 
@@ -490,7 +660,9 @@ qasm_text = st.text_area(
 # BACKENDS
 # ============================================================
 
-st.subheader("2. IBM Quantum Backends")
+st.subheader(
+    "2. IBM Quantum Backends"
+)
 
 selected_backends = st.multiselect(
     "Select backends",
@@ -500,7 +672,7 @@ selected_backends = st.multiselect(
 
 
 # ============================================================
-# ANALYZE BUTTON
+# ANALYZE
 # ============================================================
 
 run = st.button(
@@ -511,10 +683,6 @@ run = st.button(
 
 
 if run:
-
-    # --------------------------------------------------------
-    # Parse circuit
-    # --------------------------------------------------------
 
     try:
 
@@ -546,10 +714,68 @@ if run:
 
         st.stop()
 
+    with st.spinner(
+        "Refreshing calibration data and evaluating candidates..."
+    ):
 
-    # --------------------------------------------------------
-    # Circuit summary
-    # --------------------------------------------------------
+        results_df, status_df = (
+            analyze_backends(
+                circuit,
+                selected_backends
+            )
+        )
+
+    st.session_state.analysis_results = (
+        results_df
+    )
+
+    st.session_state.analysis_status = (
+        status_df
+    )
+
+    st.session_state.analysis_circuit = (
+        circuit
+    )
+
+    st.session_state.analysis_qasm = (
+        qasm_text
+    )
+
+    st.session_state.qpu_job_id = (
+        None
+    )
+
+
+# ============================================================
+# DISPLAY
+# ============================================================
+
+results_df = (
+    st.session_state.analysis_results
+)
+
+status_df = (
+    st.session_state.analysis_status
+)
+
+circuit = (
+    st.session_state.analysis_circuit
+)
+
+
+if (
+    circuit is not None
+    and
+    not results_df.empty
+    and
+    st.session_state.analysis_qasm
+    ==
+    qasm_text
+):
+
+    # ========================================================
+    # CIRCUIT ANALYSIS
+    # ========================================================
 
     st.subheader(
         "3. Circuit Analysis"
@@ -585,25 +811,9 @@ if run:
         )
 
 
-    # --------------------------------------------------------
-    # Live analysis
-    # --------------------------------------------------------
-
-    with st.spinner(
-        "Refreshing calibration data and evaluating candidates..."
-    ):
-
-        results_df, status_df = (
-            analyze_backends(
-                circuit,
-                selected_backends
-            )
-        )
-
-
-    # --------------------------------------------------------
-    # Backend status
-    # --------------------------------------------------------
+    # ========================================================
+    # BACKEND STATUS
+    # ========================================================
 
     st.subheader(
         "4. Backend Status"
@@ -618,27 +828,22 @@ if run:
         )
 
 
-    if results_df.empty:
+    # ========================================================
+    # SORT
+    # ========================================================
 
-        st.error(
-            "No usable candidates were generated."
+    results_df = (
+        results_df
+        .sort_values(
+            "combined_risk"
         )
-
-        st.stop()
-
-
-    # --------------------------------------------------------
-    # Sort
-    # --------------------------------------------------------
-
-    results_df = results_df.sort_values(
-        "combined_risk"
-    ).reset_index(
-        drop=True
+        .reset_index(
+            drop=True
+        )
     )
 
-
     best = results_df.iloc[0]
+
 
     if len(results_df) > 1:
 
@@ -652,7 +857,6 @@ if run:
 
     else:
 
-        second = None
         margin = math.nan
 
 
@@ -660,25 +864,29 @@ if run:
     # CONFIDENCE
     # ========================================================
 
-    # These are deliberately risk-margin based.
-    # They indicate separation between candidates,
-    # NOT probability of hardware success.
-
     if math.isnan(margin):
 
-        confidence_label = "Single option"
+        confidence_label = (
+            "Single option"
+        )
 
     elif margin >= 0.010:
 
-        confidence_label = "Strong preference"
+        confidence_label = (
+            "Strong preference"
+        )
 
     elif margin >= 0.003:
 
-        confidence_label = "Moderate preference"
+        confidence_label = (
+            "Moderate preference"
+        )
 
     else:
 
-        confidence_label = "Close call"
+        confidence_label = (
+            "Close call"
+        )
 
 
     # ========================================================
@@ -698,16 +906,20 @@ if run:
         </div>
 
         <div class="recommendation-main">
-        {best["backend"]} · Candidate {int(best["candidate"])}
+        {best["backend"]}
+        · Candidate {int(best["candidate"])}
         </div>
 
         <div>
-        Physical qubits: {best["physical_qubits"]}
+        Physical qubits:
+        {best["physical_qubits"]}
         </div>
 
         <div>
         Combined calibration risk:
-        <b>{best["combined_risk"]:.6f}</b>
+        <b>
+        {best["combined_risk"]:.6f}
+        </b>
         </div>
 
         </div>
@@ -716,9 +928,97 @@ if run:
     )
 
 
-    # --------------------------------------------------------
-    # Confidence row
-    # --------------------------------------------------------
+    # ========================================================
+    # QPU EXECUTION
+    # ========================================================
+
+    if st.button(
+        "Run Recommended Candidate on IBM QPU",
+        use_container_width=True
+    ):
+
+        with st.spinner(
+            "Submitting job to IBM Quantum..."
+        ):
+
+            try:
+
+                qpu_result = (
+                    submit_to_qpu(
+                        st.session_state.analysis_qasm,
+                        best["backend"],
+                        int(best["candidate"]),
+                        shots=512
+                    )
+                )
+
+                st.session_state.qpu_job_id = (
+                    qpu_result["job_id"]
+                )
+
+                st.success(
+                    "Job submitted successfully."
+                )
+
+            except Exception as exc:
+
+                st.error(
+                    f"QPU submission failed: {exc}"
+                )
+
+
+    if st.session_state.qpu_job_id:
+
+        st.write(
+            "Current Job ID:",
+            st.session_state.qpu_job_id
+        )
+
+        if st.button(
+            "Check QPU Result",
+            use_container_width=True
+        ):
+
+            with st.spinner(
+                "Checking IBM Quantum..."
+            ):
+
+                try:
+
+                    result = (
+                        get_qpu_result(
+                            st.session_state.qpu_job_id
+                        )
+                    )
+
+                    if result["ready"]:
+
+                        st.success(
+                            "QPU result is ready."
+                        )
+
+                        st.write(
+                            "Measurement counts:",
+                            result["counts"]
+                        )
+
+                    else:
+
+                        st.info(
+                            f"Job is still running: "
+                            f"{result['status']}"
+                        )
+
+                except Exception as exc:
+
+                    st.error(
+                        f"Could not retrieve result: {exc}"
+                    )
+
+
+    # ========================================================
+    # CONFIDENCE
+    # ========================================================
 
     st.markdown(
         "### Recommendation confidence"
@@ -731,22 +1031,18 @@ if run:
         confidence_label
     )
 
-    if not math.isnan(margin):
-
-        cc2.metric(
-            "Risk margin",
+    cc2.metric(
+        "Risk margin",
+        (
             f"{margin:.6f}"
-        )
-
-    else:
-
-        cc2.metric(
-            "Risk margin",
+            if not math.isnan(margin)
+            else
             "N/A"
         )
+    )
 
     cc3.metric(
-        "Candidates tested",
+        "Final candidates",
         len(results_df)
     )
 
@@ -754,31 +1050,40 @@ if run:
     if confidence_label == "Close call":
 
         st.warning(
-            "Close call: the top candidates have very similar "
-            "calibration risk. Treat the recommendation as a "
-            "preference, not a guarantee."
+            "Close call: the top candidates have "
+            "very similar calibration risk. Treat "
+            "the recommendation as a preference, "
+            "not a guarantee."
         )
 
-    elif confidence_label == "Moderate preference":
+    elif confidence_label == (
+        "Moderate preference"
+    ):
 
         st.info(
-            "Moderate preference: the recommended candidate "
-            "has a noticeable calibration-risk advantage."
+            "Moderate preference: the recommended "
+            "candidate has a noticeable "
+            "calibration-risk advantage."
         )
 
-    elif confidence_label == "Strong preference":
+    elif confidence_label == (
+        "Strong preference"
+    ):
 
         st.success(
-            "Strong preference: the recommended candidate has "
-            "a clear calibration-risk advantage."
+            "Strong preference: the recommended "
+            "candidate has a clear "
+            "calibration-risk advantage."
         )
 
 
-    # --------------------------------------------------------
-    # Key metrics
-    # --------------------------------------------------------
+    # ========================================================
+    # KEY METRICS
+    # ========================================================
 
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k2, k3, k4 = (
+        st.columns(4)
+    )
 
     k1.metric(
         "Readout loss",
@@ -792,12 +1097,16 @@ if run:
 
     k3.metric(
         "2Q gates",
-        int(best["2Q_gates"])
+        int(
+            best["2Q_gates"]
+        )
     )
 
     k4.metric(
         "Compiled depth",
-        int(best["depth"])
+        int(
+            best["depth"]
+        )
     )
 
 
@@ -810,10 +1119,12 @@ if run:
     )
 
     st.write(
-        f"CalibrationCompass selected **{best['backend']} "
-        f"candidate {int(best['candidate'])}** because it has "
-        f"the lowest combined live calibration risk among the "
-        f"{len(results_df)} candidates tested."
+        f"CalibrationCompass selected "
+        f"**{best['backend']} candidate "
+        f"{int(best['candidate'])}** because it "
+        f"has the lowest combined live "
+        f"calibration risk among the "
+        f"{len(results_df)} final candidates."
     )
 
     st.write(
@@ -852,12 +1163,16 @@ if run:
         "calibration_age"
     ]
 
-    ranking_df = results_df[
-        ranking_columns
-    ].copy()
+    ranking_df = (
+        results_df[
+            ranking_columns
+        ].copy()
+    )
 
     ranking_df["candidate"] = (
-        ranking_df["candidate"].astype(int)
+        ranking_df[
+            "candidate"
+        ].astype(int)
     )
 
     ranking_df.columns = [
@@ -892,7 +1207,9 @@ if run:
         .loc[
             results_df.groupby(
                 "backend"
-            )["combined_risk"].idxmin()
+            )[
+                "combined_risk"
+            ].idxmin()
         ]
         .sort_values(
             "combined_risk"
@@ -937,30 +1254,38 @@ if run:
         "8. Calibration Risk"
     )
 
-    chart_df = results_df[
-        [
-            "backend",
-            "candidate",
-            "combined_risk"
+    chart_df = (
+        results_df[
+            [
+                "backend",
+                "candidate",
+                "combined_risk"
+            ]
         ]
-    ].copy()
+        .copy()
+    )
 
     chart_df["label"] = (
         chart_df["backend"]
         +
         " · C"
         +
-        chart_df["candidate"]
+        chart_df[
+            "candidate"
+        ]
         .astype(int)
         .astype(str)
     )
 
-    chart_df = chart_df.set_index(
-        "label"
+    chart_df = (
+        chart_df
+        .set_index("label")
     )
 
     st.bar_chart(
-        chart_df["combined_risk"]
+        chart_df[
+            "combined_risk"
+        ]
     )
 
 
@@ -974,7 +1299,9 @@ if run:
 
         st.write(
             "Calibration timestamp:",
-            best["calibration_time"]
+            best[
+                "calibration_time"
+            ]
         )
 
         st.write(
@@ -993,17 +1320,23 @@ if run:
 
         st.write(
             "Total gate error:",
-            best["gate_error_sum"]
+            best[
+                "gate_error_sum"
+            ]
         )
 
         st.write(
             "2Q gate error:",
-            best["2Q_gate_error_sum"]
+            best[
+                "2Q_gate_error_sum"
+            ]
         )
 
         st.write(
             "Maximum readout error:",
-            best["max_readout"]
+            best[
+                "max_readout"
+            ]
         )
 
 
@@ -1012,8 +1345,9 @@ if run:
     # ========================================================
 
     st.info(
-        "CalibrationCompass is a live calibration-risk "
-        "recommender. It does not guarantee the highest "
+        "CalibrationCompass is a live "
+        "calibration-risk recommender. "
+        "It does not guarantee the highest "
         "execution fidelity on hardware."
     )
 
