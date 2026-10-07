@@ -1176,7 +1176,7 @@ The project deployment URL may change as deployment configuration evolves.
 
 Current repository homepage:
 
-https://calibration-compass-zeta.vercel.app/
+https://calibrationcompass.vercel.app/
 
 ---
 
