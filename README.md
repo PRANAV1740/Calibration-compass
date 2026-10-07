@@ -2,112 +2,110 @@
 
 ## Calibration-Aware Quantum Circuit Compilation and Backend Selection
 
-CalibrationCompass is a quantum circuit optimization and backend-selection system designed to answer a practical question in real quantum computing:
+CalibrationCompass is a quantum circuit optimization and backend-selection system designed for execution on noisy quantum hardware.
 
-> **Given a quantum circuit and several available quantum backends, where should the circuit run, and which mapping should be used to give it the best chance of producing a reliable result under the current hardware conditions?**
+Its central question is:
 
-Instead of treating transpilation as a purely circuit-level optimization problem, CalibrationCompass considers the **current calibration state of the hardware**, the **quality of physical qubits and connections**, and the **sensitivity of the circuit to different qubit mappings**.
+> **Given a quantum circuit and several available quantum backends, which backend and physical mapping should be used to make the most hardware-aware execution choice under current calibration conditions?**
 
-The system combines live IBM Quantum backend calibration data with Qiskit transpilation to produce a calibration-aware recommendation.
+Instead of treating transpilation as only a circuit-optimization problem, CalibrationCompass considers the current condition of the hardware, the physical qubits selected by the transpiler, and the calibration-related risk associated with those resources.
+
+The project combines Qiskit transpilation, live IBM Quantum calibration information, candidate mapping search, and an explainable ranking system.
 
 ---
 
-# 1. The Problem
+## 1. The Problem
 
-Running a quantum circuit on real quantum hardware is not as simple as choosing the backend with the largest number of qubits.
+Running the same logical quantum circuit on real quantum processors can produce different results.
 
-Real quantum processors are noisy and their performance changes over time.
+This happens because real QPUs are noisy and because their physical qubits do not all behave identically.
 
-Different physical qubits can have different:
+Important hardware properties include:
 
-- Readout errors
-- Gate errors
-- T1 relaxation times
-- T2 coherence times
-- Gate durations
-- Connectivity characteristics
-- Calibration ages
+- Readout error
+- Gate error
+- T1 relaxation time
+- T2 coherence time
+- Gate duration
+- Connectivity
+- Calibration age
 
-At the same time, a logical circuit can often be mapped to the physical hardware in many different ways.
+There is another important source of variation: **logical-to-physical qubit mapping**.
 
-Two transpiled versions of the **same logical circuit** can therefore produce significantly different hardware results.
+A logical circuit can often be mapped to several different physical qubit sets or layouts. Two transpiled versions of the same circuit can therefore experience different hardware error characteristics.
 
-This creates two related optimization problems:
+This creates two connected decisions:
 
 ### Backend selection
 
-Which available quantum processor is currently the most suitable for the circuit?
+Which available processor is the most suitable for the circuit right now?
 
 ### Mapping selection
 
-Once a backend is selected, which logical-to-physical qubit mapping should be used?
+Once a backend is considered, which logical-to-physical mapping is the most attractive?
 
-Traditional compilation can optimize gate count, depth, routing, and hardware connectivity, but these optimizations do not necessarily identify the best backend under changing calibration conditions.
+CalibrationCompass addresses both decisions.
 
 ---
 
-# 2. Our Approach
+## 2. Core Idea
 
-CalibrationCompass evaluates candidate execution plans by combining:
+The system evaluates candidate execution plans using:
 
-1. **Circuit structure**
-2. **Live backend calibration information**
-3. **Physical qubit quality**
-4. **Two-qubit interaction exposure**
-5. **Readout risk**
-6. **Candidate logical-to-physical mappings**
-7. **Calibration age**
-8. **Qiskit transpilation results**
+1. Circuit structure
+2. Live backend calibration information
+3. Physical qubit quality
+4. Readout error exposure
+5. Gate-error exposure
+6. Logical-to-physical mapping
+7. Two-qubit interaction exposure
+8. Calibration age
 
-The system then ranks the available candidates and explains why a particular backend and mapping were recommended.
+The current dashboard converts the relevant readout and gate-error exposure into a **calibration-risk score** and uses that score to rank candidates.
 
-The goal is not simply:
+The goal is not:
 
 > "Find the shortest circuit."
 
 The goal is:
 
-> **"Find a hardware execution plan that balances circuit requirements with the current reliability of the hardware."**
+> **"Find a hardware execution plan that is better aligned with the current condition of the available quantum hardware."**
 
 ---
 
-# 3. What Makes CalibrationCompass Different?
+## 3. What Makes CalibrationCompass Different?
 
-IBM and Qiskit already provide sophisticated transpilation and routing techniques.
+Qiskit and IBM Quantum already provide advanced transpilation and routing capabilities.
 
-CalibrationCompass focuses on a different layer of the problem.
+CalibrationCompass focuses on a higher-level execution decision:
 
-Instead of assuming that the backend is already chosen, CalibrationCompass asks:
+> **Which backend and which candidate mapping should we choose before execution?**
 
-> **Which backend and candidate mapping should we choose before execution?**
-
-The project therefore explores:
+The project therefore combines:
 
 ### Cross-backend selection
 
-Different processors can have substantially different performance for the same circuit.
+The same circuit can behave differently on different processors.
 
 ### Calibration-aware selection
 
-Hardware quality changes over time, so a decision based only on static topology or qubit count can become outdated.
+Hardware conditions change over time, so a useful decision should consider current calibration data.
 
 ### Mapping sensitivity
 
-Different SABRE transpiler seeds can generate different physical mappings for the same circuit.
+Different SABRE transpiler seeds can produce different physical mappings for the same logical circuit.
 
 ### Explainability
 
-The system reports the physical qubits, two-qubit connections, calibration age, and calibration-related risk behind a recommendation.
+The system shows the selected backend, candidate, physical qubits, two-qubit edges, calibration age, and calibration-related risk.
 
 ### Real hardware validation
 
-The project was tested against live IBM Quantum hardware rather than relying only on simulator results.
+The project includes experiments performed on live IBM Quantum hardware in addition to simulator-based studies.
 
 ---
 
-# 4. System Architecture
-
-The overall workflow is:
+## 4. System Architecture
 
 ```text
                          ┌──────────────────────┐
@@ -121,7 +119,7 @@ The overall workflow is:
                          │                      │
                          │ Qubits               │
                          │ Depth                │
-                         │ 2Q Gates             │
+                         │ 2Q gates             │
                          │ Circuit structure    │
                          └──────────┬───────────┘
                                     │
@@ -140,17 +138,15 @@ The overall workflow is:
                  │                            │
                  │ Readout error              │
                  │ Gate error                 │
-                 │ T1                         │
-                 │ T2                         │
-                 │ Gate duration              │
-                 │ Calibration age            │
+                 │ Calibration timestamp      │
+                 │ Other backend properties    │
                  └──────────────┬─────────────┘
                                 │
                                 ▼
                  ┌────────────────────────────┐
                  │ Candidate Generation       │
                  │                            │
-                 │ SABRE mappings             │
+                 │ SABRE seeds                │
                  │ Physical qubits            │
                  │ 2Q interaction exposure    │
                  └──────────────┬─────────────┘
@@ -177,6 +173,7 @@ The overall workflow is:
                  │ Recommendation             │
                  │                            │
                  │ Backend + Candidate        │
+                 │ Physical mapping           │
                  │ Explanation                │
                  └──────────────┬─────────────┘
                                 │
@@ -188,81 +185,79 @@ The overall workflow is:
 
 ---
 
-# 5. Two-Stage Transpilation Strategy
+## 5. Two-Stage Transpilation
 
-Evaluating many routing candidates can become expensive because every candidate requires transpilation.
+Evaluating a large number of candidates can be expensive because every candidate requires transpilation.
 
-CalibrationCompass therefore uses a two-stage strategy.
+CalibrationCompass therefore uses two stages.
 
-## Stage 1: Fast Screening
+### Stage 1: Fast Screening
 
-For each backend, several candidate seeds are evaluated using a lower-cost transpilation configuration.
-
-Current implementation:
+The current dashboard evaluates:
 
 - 3 IBM Quantum backends
-- 3 initial SABRE seeds per backend
+- 3 SABRE seeds per backend
 - Optimization level 1
 
-This produces:
+This creates:
 
 ```text
 3 backends × 3 candidates = 9 initial candidates
 ```
 
-The purpose of this stage is to quickly identify promising candidates.
+The purpose is to quickly identify the strongest candidate for each backend.
 
-## Stage 2: Deep Refinement
+### Stage 2: Deep Refinement
 
-The strongest candidate from each backend is then retranspiled using:
+The best Stage 1 candidate from each backend is retranspiled using:
 
 - Optimization level 3
 - SABRE layout
 - SABRE routing
 - The same candidate seed
 
-This produces:
+This creates:
 
 ```text
-3 best candidates × deep refinement = 3 final candidates
+3 finalists × deep refinement = 3 final candidates
 ```
 
-Therefore the normal workflow becomes:
+Overall:
 
 ```text
 9 fast candidates
         ↓
 3 finalists
         ↓
-3 deep transpilation runs
+3 deep refinements
         ↓
 3 final candidates
         ↓
 Recommendation
 ```
 
-This reduces the number of expensive optimization-level-3 transpilation runs while preserving a meaningful search over backend and mapping candidates.
+This reduces the number of expensive optimization-level-3 transpilation runs compared with deeply transpiling every initial candidate.
 
 ---
 
-# 6. Why Mapping Matters
+## 6. Why Mapping Matters
 
-A logical quantum circuit can often be mapped onto a physical processor in many different ways.
+A logical circuit can have multiple physically valid mappings.
 
 For example:
 
 ```text
-Logical circuit:
+Logical circuit
 
 q0 ──■────H────
      │
 q1 ──X─────────
 ```
 
-could be mapped to different physical qubits:
+can be mapped to different physical qubits:
 
 ```text
-Candidate A:
+Candidate A
 
 logical q0 → physical 22
 logical q1 → physical 23
@@ -271,47 +266,55 @@ logical q1 → physical 23
 or:
 
 ```text
-Candidate B:
+Candidate B
 
 logical q0 → physical 33
 logical q1 → physical 34
 ```
 
-Even when the physical qubit sets are similar, assigning logical operations to different physical qubits can expose the circuit to different error characteristics.
+These candidates can expose the circuit to different readout and gate-error conditions.
 
-Our experiments demonstrate that this can produce large differences in observed circuit fidelity.
+Our experiments found that candidate mapping can produce **substantial differences in observed fidelity**, even for the same logical circuit and backend.
 
 ---
 
-# 7. Candidate Generation
+## 7. Candidate Generation
 
 CalibrationCompass uses Qiskit's SABRE-based transpilation process with different transpiler seeds to generate candidate mappings.
 
-A candidate is characterized by properties such as:
+A candidate contains information such as:
 
 - Backend
 - Candidate seed
 - Physical qubits used
 - Circuit depth
-- Number of two-qubit gates
-- Two-qubit physical edges used
-- Readout error exposure
-- Gate error exposure
-- T1 characteristics
-- T2 characteristics
-- Calibration age
+- Gate count
+- Two-qubit gate count
+- Two-qubit physical edges
+- Readout-error exposure
+- Gate-error exposure
 
-This allows candidates to be compared using both circuit and hardware information.
+The candidate is then evaluated using the current calibration information available for that backend.
 
 ---
 
-# 8. Calibration-Aware Risk
+## 8. Current Calibration-Risk Model
 
-CalibrationCompass calculates a hardware-risk score from calibration characteristics.
+The dashboard's current ranking is deliberately interpretable.
 
-The purpose of the score is not to claim an exact hardware fidelity.
+For every candidate, it calculates:
 
-Instead, the score is used as a **relative indicator of hardware risk**.
+### Readout loss
+
+A multiplicative estimate based on the readout error of the physical qubits involved in the measured circuit.
+
+### Gate loss
+
+A multiplicative estimate based on the gate-error values associated with the gates in the transpiled candidate.
+
+### Combined calibration risk
+
+The dashboard combines these losses into a single relative risk value.
 
 Conceptually:
 
@@ -319,89 +322,99 @@ Conceptually:
 Lower calibration risk
         ↓
 More attractive candidate
-        ↓
-Higher expected reliability
 ```
 
-The recommendation therefore answers:
+This score is a **relative hardware-risk indicator**.
 
-> "Which candidate appears safest according to the currently available calibration information?"
-
-rather than:
-
-> "Which candidate is guaranteed to have the highest experimental fidelity?"
-
-This distinction is important because quantum hardware behaviour is stochastic and calibration data is only a snapshot of the processor.
+It is not an exact prediction of experimental fidelity.
 
 ---
 
-# 9. Live IBM Quantum Backends
+## 9. Live IBM Quantum Backends
 
-During development and validation, CalibrationCompass was tested with live IBM Quantum backends including:
+The live dashboard currently evaluates:
 
 - `ibm_fez`
 - `ibm_kingston`
 - `ibm_marrakesh`
 
-The exact calibration values are intentionally treated as **time-dependent**.
+The calibration values are retrieved from IBM Quantum at analysis time.
 
-A backend that is preferable today may not remain preferable after calibration changes.
+Because hardware is continuously recalibrated, the exact values can change between runs.
 
-This is one of the main motivations for making the recommendation calibration-aware.
+The backend selected today therefore does not have to be the backend selected tomorrow.
 
 ---
 
 # 10. Experimental Validation
 
-The project was evaluated through multiple stages.
+The project was validated in both simulated-noise environments and on live IBM Quantum hardware.
 
-## 10.1 Initial Backend Benchmark
+It is important to distinguish these two categories.
 
-A three-qubit GHZ experiment produced:
+### Simulator-based experiments
 
-| Backend | Observed Fidelity |
+Several early benchmarks use Qiskit's fake IBM backends together with Aer noise models.
+
+These are useful for controlled experimentation and rapid benchmarking.
+
+### Real hardware experiments
+
+Separate datasets were collected by submitting circuits to live IBM Quantum QPUs.
+
+These results are used to evaluate how well calibration-aware recommendations correspond to actual hardware behaviour.
+
+---
+
+## 10.1 Simulator Backend Benchmark
+
+A three-qubit GHZ circuit was evaluated using Qiskit's fake IBM backends and Aer noise models.
+
+| Backend | Simulated Fidelity |
 |---|---:|
 | Sherbrooke | 93.00% |
 | Torino | 75.80% |
 | Fez | **96.25%** |
 
-This showed that backend choice alone can create a substantial performance difference.
+These are **simulated noisy-backend results, not live QPU measurements**.
+
+They demonstrate that backend characteristics can produce substantially different outcomes for the same logical circuit.
 
 ---
 
-# 11. Calibration Drift Experiment
+## 10.2 Calibration Drift Experiment
 
-A synthetic calibration-drift experiment was created to test whether backend selection should change when hardware conditions change.
+A synthetic calibration-drift experiment tested whether changing hardware conditions could change the preferred backend.
 
-Under the baseline conditions, Fez was preferred.
+At baseline conditions, Fez was preferred.
 
 When the assumed readout error of one Fez qubit was progressively increased, the preferred backend changed.
 
-The drift sweep demonstrated that:
+Conceptually:
 
 ```text
-Stable calibration
+Baseline conditions
         ↓
 Fez preferred
 
-Increasing calibration degradation
+Increasing readout degradation
         ↓
-Risk increases
+Fez risk increases
 
 Large degradation
         ↓
 Sherbrooke becomes preferable
 ```
 
-This demonstrates the core motivation behind calibration-aware backend selection.
+This experiment illustrates why backend selection should not rely only on static topology.
 
 ---
 
-# 12. Circuit-Type Benchmark
+## 10.3 Circuit-Type Benchmark
 
 Different circuit structures respond differently to hardware noise.
 
-A benchmark across several circuit families produced:
+Using fake IBM backends and Aer noise models:
 
 | Circuit | Sherbrooke | Torino | Fez |
 |---|---:|---:|---:|
@@ -410,47 +423,37 @@ A benchmark across several circuit families produced:
 | QAOA-like | 99.37% | 99.42% | **99.62%** |
 | Hardware-efficient | 98.97% | 95.32% | **99.73%** |
 
-The important observation is that **there is no universally best backend for every circuit**.
-
-Circuit structure matters.
+The key result is that there is **no single backend that is best for every circuit type** in this benchmark.
 
 ---
 
-# 13. Candidate Mapping Benchmark
+## 10.4 Candidate Mapping Benchmark
 
-The project evaluated multiple transpilation candidates for each backend.
+Multiple candidate mappings were evaluated for each fake backend.
 
 The benchmark contained:
 
 ```text
-180 candidate executions
+180 candidate evaluations
 ```
 
-The observed fidelity spread was large.
+The observed fidelity spread was:
 
-| Backend | Minimum Fidelity | Maximum Fidelity | Gap |
+| Backend | Minimum Fidelity | Maximum Fidelity | Best-Worst Gap |
 |---|---:|---:|---:|
 | Sherbrooke | 29.34% | 99.23% | 69.89 pts |
 | Torino | 27.62% | 98.67% | 71.05 pts |
 | Fez | 46.40% | 99.66% | 53.27 pts |
 
-This is one of the strongest experimental observations from the project.
-
-The same logical circuit can behave very differently depending on its physical mapping.
+This is strong evidence that the physical mapping can materially affect circuit behaviour.
 
 ---
 
-# 14. Candidate-Level Selection
+## 10.5 Calibration-Based Candidate Selection
 
-A calibration-aware ESP-style selector was compared against an oracle that knows the experimentally best candidate.
+A calibration-based ESP-style selector was compared with an oracle that knows which candidate achieved the highest observed fidelity in the benchmark.
 
-For the candidate-level benchmark:
-
-```text
-Oracle decisions: 30
-```
-
-Results:
+For 30 candidate decisions:
 
 | Metric | Calibration-Based Selector |
 |---|---:|
@@ -458,13 +461,13 @@ Results:
 | Average regret | 0.00564 |
 | Maximum regret | 0.08932 |
 
-The result shows that calibration features provide useful predictive information, but they do not perfectly determine experimental fidelity.
+The result shows that calibration information contains useful predictive signal, but it does not perfectly determine the experimentally best candidate.
 
 ---
 
-# 15. Pairwise Candidate Model
+## 10.6 Pairwise Candidate Model
 
-A pairwise candidate-ranking approach was also evaluated.
+A pairwise ranking model was also tested.
 
 Cross-validation results:
 
@@ -474,49 +477,59 @@ Cross-validation results:
 | Average regret | 0.00564 | **0.00369** |
 | Maximum regret | 0.08932 | **0.02512** |
 
-The pairwise model reduced regret in the tested cross-validation dataset, although its selection accuracy was lower.
+The pairwise model reduced regret on this cross-validation experiment, although it did not improve selection accuracy.
 
-This experiment helped identify an important lesson:
+This reinforced an important lesson:
 
-> Better prediction of numerical fidelity does not automatically mean better selection accuracy.
-
----
-
-# 16. Why the Final Product Does Not Depend on the ML Selector
-
-Machine-learning models were tested for backend and candidate selection.
-
-They were useful for experimentation, but the final real-hardware evaluation showed that a purely trained selector was not reliable enough to serve as the main product decision-maker.
-
-On the final real-hardware dataset, the ML selector performed substantially worse than the calibration baseline.
-
-Therefore, CalibrationCompass deliberately does **not** present the ML model as a guaranteed optimizer.
-
-Instead, the product uses the more interpretable:
-
-> **Live calibration-risk recommendation approach**
-
-The ML experiments remain valuable as evidence that the problem is difficult and that hardware measurements alone do not perfectly predict future experimental fidelity.
+> Better prediction of a numerical value does not automatically produce better candidate-selection decisions.
 
 ---
 
-# 17. Real Hardware Dataset
+# 11. Machine-Learning Findings
 
-A real IBM Quantum hardware dataset was constructed using:
+Machine-learning models were investigated for backend and candidate selection.
+
+The experiments were useful for understanding the problem, but the final real-hardware dataset showed that the trained ML selector was not reliable enough to be the primary production decision-maker.
+
+In the final three-circuit real-hardware leave-one-circuit-out evaluation:
+
+```text
+ML selection accuracy          = 0.00%
+Calibration baseline accuracy  = 33.33%
+```
+
+The average regret was also much worse for the ML selector:
+
+```text
+ML average regret              ≈ 0.1737
+Calibration average regret     ≈ 0.0173
+```
+
+This is why the current product does **not** present the ML model as the main selector.
+
+Instead, the deployed recommendation is based on the more interpretable live calibration-risk approach.
+
+The ML work remains part of the research contribution because it demonstrates how difficult it is to predict stochastic QPU behaviour from limited calibration snapshots.
+
+---
+
+# 12. Real Hardware Dataset
+
+A real-hardware dataset was collected using:
 
 - Bell circuits
 - GHZ circuits
-- Ring-style circuits
+- Ring circuits
 - Multiple IBM Quantum backends
 - Multiple transpilation candidates
 
-The final dataset contained:
+The final dataset contains:
 
 ```text
 54 real-hardware observations
 ```
 
-Average fidelity by circuit type:
+Mean fidelity by circuit type:
 
 | Circuit Type | Mean Fidelity |
 |---|---:|
@@ -524,7 +537,7 @@ Average fidelity by circuit type:
 | GHZ | 89.40% |
 | Ring | 89.53% |
 
-Average fidelity by backend:
+Mean fidelity by backend:
 
 | Backend | Mean Fidelity |
 |---|---:|
@@ -532,117 +545,132 @@ Average fidelity by backend:
 | ibm_kingston | 92.22% |
 | ibm_marrakesh | 87.66% |
 
-Overall:
+Observed range:
 
 ```text
-Minimum observed fidelity ≈ 47.98%
-Maximum observed fidelity ≈ 98.23%
+Minimum fidelity ≈ 47.98%
+Maximum fidelity ≈ 98.23%
 ```
 
-These results further demonstrate the effect of backend and mapping choice.
+These measurements came from real IBM Quantum hardware executions.
 
 ---
 
-# 18. Live Hardware Mapping Validation
+# 13. Live Hardware Mapping Validation
 
-A live validation experiment evaluated six candidate mappings on each of three IBM Quantum backends.
+A live QPU experiment evaluated six candidate mappings on each of three IBM Quantum backends.
 
-Best candidates observed:
+Best observed candidates:
 
-| Backend | Best Candidate | Fidelity |
+| Backend | Best Candidate | Observed Fidelity |
 |---|---|---:|
 | ibm_fez | C33 | 97.10% |
 | ibm_kingston | C66 | 97.34% |
 | ibm_marrakesh | C55 | **97.75%** |
 
-An important observation was that the globally best candidate was not always the one selected by the simplest calibration score.
+The globally best observed candidate was not always the candidate with the lowest calibration-risk score.
 
 In this experiment:
 
 ```text
-Simple calibration recommendation
-            ↓
+Lowest simple calibration risk
+        ↓
 ibm_kingston / C66
 
-Observed best hardware result
-            ↓
+Highest observed hardware fidelity
+        ↓
 ibm_marrakesh / C55
 ```
 
-This validates the project's main limitation:
-
-> Calibration is useful for making a hardware-risk-aware recommendation, but it cannot perfectly predict stochastic QPU performance.
-
----
-
-# 19. Mapping Sensitivity
-
-A separate mapping experiment demonstrated that different transpiler seeds can produce very different outcomes.
-
-For example, on the same circuit and backend, candidate seeds produced results ranging from very high fidelity to substantially degraded fidelity.
-
-A live validation sample showed:
+This is an important validation result because it shows the difference between:
 
 ```text
-ibm_torino
-
-Candidate 11 → 89.84%
-Candidate 22 → 93.80%
-Candidate 33 → 22.28%
-Candidate 44 → 79.90%
-Candidate 55 → 85.82%
-Candidate 66 → 91.40%
+Calibration-based risk estimation
 ```
 
-This demonstrates why selecting only a backend is not sufficient.
+and:
 
-The mapping itself can matter significantly.
+```text
+Actual experimental QPU fidelity
+```
+
+Calibration data is useful, but it is not a perfect fidelity oracle.
 
 ---
 
-# 20. Noise Ablation
+# 14. Mapping Sensitivity on Live Hardware
 
-To understand what was driving candidate differences, noise-ablation experiments separated:
+A separate live validation experiment evaluated six candidates on several backends.
 
-- Readout effects
-- Gate errors
+One representative set of results was:
+
+| Backend | Candidate | Observed Fidelity |
+|---|---:|---:|
+| Fez | C11 | 96.58% |
+| Fez | C22 | 96.08% |
+| Fez | C33 | 96.68% |
+| Fez | C44 | 44.64% |
+| Fez | C55 | 96.16% |
+| Fez | C66 | 89.74% |
+| Sherbrooke | C11 | 90.76% |
+| Sherbrooke | C22 | 42.34% |
+| Sherbrooke | C33 | 86.42% |
+| Sherbrooke | C44 | 94.80% |
+| Sherbrooke | C55 | 74.26% |
+| Sherbrooke | C66 | 89.66% |
+| Torino | C11 | 89.84% |
+| Torino | C22 | 93.80% |
+| Torino | C33 | **22.28%** |
+| Torino | C44 | 79.90% |
+| Torino | C55 | 85.82% |
+| Torino | C66 | 91.40% |
+
+These results demonstrate that different transpilation candidates can have very different hardware outcomes.
+
+---
+
+# 15. Noise Ablation
+
+Noise-ablation experiments were used to investigate which error source contributed most strongly to one representative candidate difference.
+
+The experiment separated:
+
+- Full noise
+- Readout-only effects
+- Gate-only effects
 - Thermal effects
 
-For one representative mapping comparison, the observed candidate gap was dominated by readout effects.
+For the representative mapping comparison, the observed candidate gap was dominated by readout effects.
 
-This supports including readout-related hardware information when comparing candidates.
+This supports including readout information in candidate evaluation.
 
-It also highlights why a single hardware metric is insufficient.
+It also reinforces that no single calibration metric fully describes a QPU.
 
 ---
 
-# 21. Calibration Age Matters
+# 16. Calibration Age
 
-Calibration values are snapshots.
+Calibration information is a time-dependent snapshot.
 
-During live hardware validation, calibration snapshot ages differed between backends.
+During live hardware validation, the calibration ages differed between backends.
 
-Example observations included calibration ages of roughly:
+Representative observations were approximately:
 
 ```text
 Fez        ≈ 63.5 minutes
 Kingston   ≈ 79.1 minutes
-Marrakesh  ≈ 20.2 minutes
+Marrakesh  ≈ 39.6 minutes
 ```
 
-This means two backends can have calibration information that is not equally recent.
-
-CalibrationCompass therefore exposes calibration age as part of the recommendation context.
+Calibration age is therefore exposed in the application so that users can see how recent the underlying hardware information is.
 
 ---
 
-# 22. Recommendation Confidence
+# 17. Recommendation Confidence
 
-CalibrationCompass also reports a qualitative recommendation confidence.
+The dashboard provides a qualitative recommendation-strength indicator.
 
-The current interface uses the difference between the best and next-best calibration-risk scores.
-
-The displayed levels are:
+The current thresholds are:
 
 ```text
 Risk margin >= 0.010
@@ -655,74 +683,77 @@ Risk margin < 0.003
 → Close call
 ```
 
-This is deliberately **not** presented as a probability of success.
+This is intentionally described as **ranking confidence**, not a probability that the circuit will succeed.
 
-It represents the strength of the ranking according to the calibration-risk metric.
-
----
-
-# 23. User Interface
-
-CalibrationCompass includes an interactive Streamlit dashboard.
-
-The dashboard allows the user to:
-
-- Enter an OpenQASM 2.0 circuit
-- Upload a `.qasm` file
-- Load example Bell, GHZ, and Ring circuits
-- View circuit analysis
-- Select from live IBM Quantum backends
-- Analyze calibration information
-- Generate candidate mappings
-- Compare candidate risks
-- View physical qubits and two-qubit edges
-- Inspect calibration age
-- View the recommended backend and candidate
-- Submit a selected candidate to IBM Quantum hardware
-- Check the status of a submitted QPU job
-- Inspect returned measurement counts
+A "Strong preference" means the calibration-risk ranking separates the leading candidate more clearly from the next candidate.
 
 ---
 
-# 24. Dashboard Workflow
+# 18. Dashboard
 
-The dashboard follows this process:
+CalibrationCompass provides an interactive Streamlit dashboard.
+
+The interface supports:
+
+- OpenQASM 2.0 input
+- `.qasm` file upload
+- Bell example circuit
+- GHZ example circuit
+- Ring example circuit
+- Circuit analysis
+- Live IBM Quantum backend status
+- Live calibration retrieval
+- Candidate mapping generation
+- Two-stage transpilation
+- Calibration-risk ranking
+- Backend comparison
+- Physical-qubit inspection
+- Two-qubit-edge inspection
+- Calibration-age inspection
+- Recommendation confidence
+- Optional QPU submission
+- QPU job-status checking
+- Measurement-count inspection
+
+---
+
+# 19. Dashboard Workflow
 
 ```text
 Input QASM
-   ↓
+    ↓
 Parse circuit
-   ↓
+    ↓
 Analyze circuit structure
-   ↓
+    ↓
 Load live IBM backends
-   ↓
+    ↓
 Retrieve calibration data
-   ↓
+    ↓
 Generate candidate mappings
-   ↓
-Stage 1 fast screening
-   ↓
-Select finalists
-   ↓
-Stage 2 deep refinement
-   ↓
+    ↓
+Stage 1: fast screening
+    ↓
+Select best candidate per backend
+    ↓
+Stage 2: deep refinement
+    ↓
 Calculate calibration risk
-   ↓
+    ↓
 Rank candidates
-   ↓
+    ↓
 Explain recommendation
-   ↓
+    ↓
 Optional QPU execution
 ```
 
 ---
 
-# 25. QPU Execution
+# 20. QPU Execution
 
-CalibrationCompass supports optional execution on real IBM Quantum hardware.
+CalibrationCompass supports optional execution on IBM Quantum hardware.
 
-The execution workflow is intentionally asynchronous:
+The execution flow is asynchronous:
 
 ```text
 Submit circuit
@@ -731,23 +762,14 @@ Receive IBM Job ID
       ↓
 Job enters queue
       ↓
-Check status later
+Check status
       ↓
-Retrieve result when complete
+Retrieve result when ready
 ```
 
-This prevents the dashboard from blocking while the quantum job waits in the IBM Quantum queue.
+This prevents the dashboard from blocking while the QPU job waits in the IBM Quantum queue.
 
-The returned result can include measurement counts such as:
-
-```text
-00
-01
-10
-11
-```
-
-For example, an initial real-QPU GHZ-style validation produced:
+A representative early real-QPU GHZ-style execution returned:
 
 ```text
 00 → 240
@@ -756,112 +778,104 @@ For example, an initial real-QPU GHZ-style validation produced:
 10 → 20
 ```
 
-with approximately:
+From 512 shots, the expected `00`/`11` outcomes accounted for approximately:
 
 ```text
-93.36% of shots in the expected 00/11 outcomes
+93.36%
 ```
 
 ---
 
-# 26. Technical Stack
+# 21. Important Design Decision
 
-## Quantum Computing
+CalibrationCompass separates:
 
-- Qiskit
-- Qiskit Aer
-- Qiskit IBM Runtime
-- Qiskit IBM Transpiler
-- IBM Quantum hardware
+### Calibration-risk estimation
 
-## Programming
+from:
 
-- Python 3.13
-- NumPy
-- pandas
+### Actual experimental fidelity
 
-## Machine Learning Experiments
+The calibration-risk score is derived from available hardware properties and candidate exposure.
 
-- XGBoost
-- scikit-learn
-- SHAP
+It is useful for:
 
-## Visualization
+- Relative candidate ranking
+- Hardware-risk explanation
+- Current backend comparison
+- Showing why one candidate is preferred
 
-- Matplotlib
-- Streamlit
+It is **not** a deterministic predictor of the exact fidelity a QPU will produce.
 
-## Deployment / Project Infrastructure
-
-- Git
-- GitHub
-- Vercel deployment experiments
+This distinction is central to the design of the system.
 
 ---
 
-# 27. Project Structure
+# 22. Limitations
 
-The repository contains the main application, live hardware utilities, experimental studies, and saved results.
+### Calibration data is incomplete
 
-```text
-Calibration-compass/
-│
-├── dashboard.py
-├── calibrationcompass.py
-├── qpu_executor.py
-│
-├── live_ibm_backends.py
-├── live_ibm_calibration.py
-├── live_ibm_candidates.py
-├── live_calibration_score.py
-├── live_qasm_recommender.py
-├── live_mapping_analysis.py
-├── live_mapping_validation.py
-├── live_backend_mapping_selection.py
-├── live_drift_check.py
-│
-├── train_model.py
-├── train_hard_model.py
-├── train_final_real_model.py
-├── train_real_model.py
-├── validate_live_selection.py
-├── live_model_test.py
-│
-├── collect_real_dataset.py
-├── build_real_dataset_v2.py
-├── rebuild_real_dataset_clean.py
-├── fix_bell_dataset.py
-├── fix_clean_bell.py
-│
-├── inspect_saved_jobs.py
-├── check_ibm_connection.py
-│
-├── experiments/
-│   ├── backend benchmarking
-│   ├── calibration experiments
-│   ├── drift experiments
-│   ├── candidate benchmarking
-│   ├── mapping analysis
-│   ├── ML experiments
-│   ├── noise analysis
-│   └── QPU execution
-│
-└── results/
-    ├── benchmark datasets
-    ├── candidate evaluations
-    ├── calibration analysis
-    ├── mapping validation
-    ├── ML experiments
-    └── real hardware results
-```
+The current score does not represent the complete physical noise environment of a QPU.
 
-The `experiments/` directory contains the detailed research and validation scripts used during development.
+### Calibration changes over time
 
-The `results/` directory contains the generated datasets and experimental outputs supporting the conclusions described in this README.
+A recommendation can change after recalibration.
+
+### QPU results are stochastic
+
+Repeated executions can produce different results.
+
+### Mapping effects are circuit-dependent
+
+A mapping that works well for one circuit may not be optimal for another.
+
+### Candidate search is limited
+
+CalibrationCompass evaluates a selected set of candidates rather than every possible logical-to-physical mapping.
+
+### The current risk score is heuristic
+
+It is intentionally interpretable and lightweight rather than a full noise model.
+
+### ML is not yet reliable enough as the main selector
+
+The final real-hardware validation did not support using the trained ML model as the primary product decision-maker.
 
 ---
 
-# 28. Installation
+# 23. What We Learned
+
+## Backend choice matters
+
+Different quantum processors can produce different results for the same logical circuit.
+
+## Mapping choice matters
+
+Different transpiler seeds can produce dramatically different physical execution plans.
+
+## Calibration matters
+
+Changing hardware conditions can change the relative attractiveness of a backend or mapping.
+
+## No single metric is sufficient
+
+Readout error, gate error, circuit structure, connectivity, calibration age, and mapping exposure each provide only part of the picture.
+
+## Better compilation does not automatically mean better hardware execution
+
+Lower depth or fewer gates do not guarantee the highest observed fidelity.
+
+## Prediction is harder than ranking
+
+Real QPU behaviour is stochastic and time-dependent.
+
+## Explainability matters
+
+A hardware recommendation is more useful when the system also shows the physical qubits, mapping, calibration age, and risk behind the decision.
+
+---
+
+# 24. Installation
 
 ## Clone the repository
 
@@ -876,15 +890,15 @@ cd Calibration-compass
 python -m venv qenv
 ```
 
-Activate it:
+Activate it in PowerShell:
 
 ```powershell
 .\qenv\Scripts\Activate.ps1
 ```
 
-## Install dependencies
+## Install the tested dependencies
 
-The tested development environment uses Qiskit 2.4.2.
+The development environment used Qiskit 2.4.2.
 
 ```powershell
 pip install "qiskit==2.4.2"
@@ -896,13 +910,11 @@ pip install numpy pandas scikit-learn xgboost shap matplotlib streamlit
 
 ---
 
-# 29. Configure IBM Quantum
+# 25. IBM Quantum Configuration
 
-CalibrationCompass can use IBM Quantum Runtime for live backend information and optional QPU execution.
+CalibrationCompass uses IBM Quantum Runtime for live backend information and optional QPU execution.
 
-Configure your IBM Quantum account through the Qiskit Runtime service.
-
-Example:
+Configure the IBM Quantum account through Qiskit Runtime:
 
 ```python
 from qiskit_ibm_runtime import QiskitRuntimeService
@@ -915,13 +927,13 @@ QiskitRuntimeService.save_account(
 )
 ```
 
-Never commit your API key to GitHub.
+**Never commit the API key to GitHub.**
 
-The key should remain private and should never be placed directly inside `dashboard.py` or any other tracked source file.
+Do not place the real key inside `dashboard.py`, this README, or any other tracked file.
 
 ---
 
-# 30. Test the IBM Quantum Connection
+# 26. Test the IBM Quantum Connection
 
 Run:
 
@@ -929,11 +941,11 @@ Run:
 python check_ibm_connection.py
 ```
 
-A successful connection should allow CalibrationCompass to access the configured IBM Quantum instance and retrieve available backends.
+A successful connection allows the project to retrieve the configured IBM Quantum backends.
 
 ---
 
-# 31. Run CalibrationCompass Locally
+# 27. Run the Dashboard
 
 From the project directory:
 
@@ -941,7 +953,7 @@ From the project directory:
 streamlit run dashboard.py
 ```
 
-Streamlit will start the local application and provide a browser URL, normally similar to:
+Streamlit normally opens the application at:
 
 ```text
 http://localhost:8501
@@ -949,42 +961,34 @@ http://localhost:8501
 
 ---
 
-# 32. Using the Dashboard
+# 28. Using the Dashboard
 
-### Step 1
+### 1. Enter a circuit
 
-Enter an OpenQASM 2.0 circuit.
+Paste an OpenQASM 2.0 circuit into the input area.
 
-### Step 2
+### 2. Or upload a QASM file
 
-Alternatively, upload a `.qasm` file.
+Use the `.qasm` upload option.
 
-### Step 3
+### 3. Or use an example
 
-Use one of the example circuits:
+Choose:
 
 - Bell
 - GHZ
 - Ring
 
-### Step 4
+### 4. Run the analysis
 
-Run the analysis.
+CalibrationCompass analyzes the circuit and retrieves live backend information.
 
-### Step 5
-
-CalibrationCompass retrieves the current backend information.
-
-### Step 6
-
-The system evaluates candidate mappings using the two-stage transpilation strategy.
-
-### Step 7
+### 5. Review the recommendation
 
 The dashboard displays:
 
 - Recommended backend
-- Recommended candidate
+- Candidate
 - Calibration risk
 - Recommendation confidence
 - Physical qubits
@@ -992,194 +996,151 @@ The dashboard displays:
 - Calibration age
 - Candidate ranking
 
-### Step 8
+### 6. Optionally run on hardware
 
-A selected candidate can optionally be submitted to real IBM Quantum hardware.
-
----
-
-# 33. Important Design Decision
-
-CalibrationCompass intentionally separates:
-
-### Hardware-risk estimation
-
-from
-
-### Actual experimental fidelity
-
-The calibration-risk score is derived from hardware properties and circuit exposure.
-
-It is therefore useful for:
-
-- Ranking candidates
-- Explaining hardware risk
-- Detecting potentially poor choices
-- Comparing current backend conditions
-
-It is **not** a deterministic predictor of the exact fidelity that the QPU will produce.
+Submit the selected candidate to IBM Quantum and check the job status later.
 
 ---
 
-# 34. Limitations
+# 29. Project Structure
 
-Quantum hardware is stochastic and calibration data is incomplete.
+The repository contains the application, live-hardware utilities, experiments, and saved results.
 
-Therefore:
+```text
+Calibration-compass/
+│
+├── dashboard.py
+├── calibrationcompass.py
+├── qpu_executor.py
+├── check_ibm_connection.py
+│
+├── live_ibm_backends.py
+├── live_ibm_calibration.py
+├── live_ibm_candidates.py
+├── live_calibration_score.py
+├── live_qasm_recommender.py
+├── live_mapping_analysis.py
+├── live_mapping_validation.py
+├── live_backend_mapping_selection.py
+├── live_drift_check.py
+│
+├── train_model.py
+├── train_hard_model.py
+├── train_real_model.py
+├── train_final_real_model.py
+├── live_model_test.py
+├── validate_live_selection.py
+│
+├── collect_real_dataset.py
+├── build_real_dataset_v2.py
+├── rebuild_real_dataset_clean.py
+│
+├── experiments/
+│   ├── backend comparison
+│   ├── calibration analysis
+│   ├── calibration drift
+│   ├── candidate benchmarking
+│   ├── mapping analysis
+│   ├── noise analysis
+│   ├── ML experiments
+│   └── QPU experiments
+│
+└── results/
+    ├── benchmark datasets
+    ├── calibration analysis
+    ├── candidate evaluations
+    ├── mapping validation
+    ├── ML results
+    └── real-hardware results
+```
 
-### Calibration data is not the complete noise model
+The `experiments/` directory contains the research and validation scripts used during development.
 
-There are many hardware effects that are not completely captured by the simplified ranking score.
-
-### Calibration changes over time
-
-A recommendation can become less relevant as the device is recalibrated.
-
-### Hardware results are probabilistic
-
-The same circuit can produce different results across repeated executions.
-
-### Mapping effects are circuit-dependent
-
-A physical qubit that works well for one circuit is not necessarily optimal for another.
-
-### Candidate search is limited
-
-CalibrationCompass evaluates a selected set of transpilation candidates rather than every possible logical-to-physical mapping.
-
-### Machine learning is not yet reliable enough as the primary selector
-
-The ML experiments demonstrated interesting predictive behaviour but did not outperform the calibration-based strategy consistently enough to justify making ML the main decision mechanism.
-
----
-
-# 35. What We Learned
-
-The experiments led to several important conclusions.
-
-## Backend choice matters
-
-Different IBM Quantum processors can produce noticeably different results for the same logical circuit.
-
-## Mapping choice matters
-
-Different transpiler seeds can generate dramatically different physical execution plans.
-
-## Calibration matters
-
-Changes in assumed or observed hardware quality can change which backend appears preferable.
-
-## No single metric is sufficient
-
-Readout error, gate error, T1, T2, circuit depth, gate count, connectivity, and mapping exposure all provide partial information.
-
-## Better compilation is not automatically better execution
-
-A circuit with a smaller depth or fewer operations does not necessarily produce the highest experimental fidelity.
-
-## Prediction is harder than ranking
-
-Even sophisticated ML models can struggle because real QPU behaviour contains stochastic and time-dependent effects.
-
-## Explainability is important
-
-For a hardware recommendation system, showing the selected backend and the physical properties behind the recommendation is often more useful than simply returning one unexplained answer.
+The `results/` directory contains the datasets and outputs supporting the experimental conclusions.
 
 ---
 
-# 36. Future Work
+# 30. Reproducibility
 
-CalibrationCompass can be extended in several directions.
-
-### Larger candidate search
-
-Evaluate more SABRE seeds and more layout candidates.
-
-### More advanced calibration features
-
-Include additional backend parameters and spatial correlations between physical qubits.
-
-### Temporal modelling
-
-Track calibration history rather than treating each calibration snapshot independently.
-
-### Better noise modelling
-
-Incorporate richer error models and crosstalk information.
-
-### Adaptive candidate search
-
-Use early candidate results to decide which additional mappings should be explored.
-
-### Circuit-specific weighting
-
-Automatically determine which calibration features matter most for different circuit families.
-
-### Online learning
-
-Use newly collected QPU results to continuously improve the recommendation strategy.
-
-### Multi-objective optimization
-
-Optimize not only fidelity risk but also:
-
-- Execution time
-- Queue time
-- Circuit depth
-- Number of gates
-- Backend availability
-
----
-
-# 37. Reproducibility
-
-The repository contains the scripts used to perform the major experiments described in this README.
-
-The most important categories include:
+The project includes experiments covering:
 
 ```text
 Backend comparison
 Calibration analysis
 Calibration drift
 Candidate benchmarking
+Candidate ranking
 Mapping sensitivity
 Noise ablation
 Real hardware validation
-Machine learning experiments
+Machine-learning experiments
 QPU execution
 ```
 
-The generated CSV files in `results/` contain the experimental outputs used for analysis.
+The generated CSV files in `results/` provide the data used for the reported analyses.
 
-This allows the project to be inspected from:
+The project can therefore be followed through:
 
 ```text
 Source code
-      ↓
-Experimental scripts
-      ↓
-Generated datasets
-      ↓
+     ↓
+Experiments
+     ↓
+Datasets
+     ↓
 Analysis
-      ↓
-Dashboard recommendation
+     ↓
+Calibration-aware recommendation
+     ↓
+Optional QPU validation
 ```
 
 ---
 
-# 38. Project Philosophy
+# 31. Future Work
 
-CalibrationCompass is built around a simple principle:
+### Larger candidate search
 
-> **Quantum compilation should consider the condition of the hardware, not only the structure of the circuit.**
+Evaluate more transpiler seeds and more layout candidates.
 
-A circuit that is theoretically equivalent can behave very differently on different physical resources.
+### Richer calibration features
 
-Therefore, compilation and hardware selection should be considered together.
+Include more backend properties and spatial relationships between physical qubits.
+
+### Temporal modelling
+
+Track calibration history instead of treating every snapshot independently.
+
+### Better noise modelling
+
+Include richer error information and crosstalk-related effects.
+
+### Adaptive candidate search
+
+Use early candidate results to decide which mappings deserve additional evaluation.
+
+### Circuit-specific weighting
+
+Learn which hardware characteristics matter most for different circuit families.
+
+### Online learning
+
+Use new QPU results to improve the recommendation system over time.
+
+### Multi-objective optimization
+
+Consider additional execution objectives such as:
+
+- Queue time
+- Execution time
+- Circuit depth
+- Gate count
+- Backend availability
+- Calibration risk
 
 ---
 
-# 39. Current Status
+# 32. Current Status
 
 CalibrationCompass currently provides:
 
@@ -1187,7 +1148,7 @@ CalibrationCompass currently provides:
 - Live calibration retrieval
 - OpenQASM 2.0 input
 - QASM file upload
-- Example Bell/GHZ/Ring circuits
+- Bell/GHZ/Ring example circuits
 - Circuit analysis
 - Candidate mapping generation
 - Two-stage transpilation
@@ -1199,17 +1160,27 @@ CalibrationCompass currently provides:
 - Asynchronous QPU job checking
 - Real hardware validation
 - Experimental datasets
-- ML research experiments
+- Machine-learning research experiments
 
-The current product direction is a:
+The current product direction is:
 
-> **Calibration-aware quantum backend and mapping recommender**
+> **A calibration-aware quantum backend and mapping recommender**
 
 rather than a guaranteed hardware-fidelity predictor.
 
 ---
 
-# 40. Repository
+# 33. Live Demo
+
+The project deployment URL may change as deployment configuration evolves.
+
+Current repository homepage:
+
+https://calibration-compass-zeta.vercel.app/
+
+---
+
+# 34. Repository
 
 GitHub:
 
@@ -1217,13 +1188,13 @@ https://github.com/PRANAV1740/Calibration-compass
 
 ---
 
-# 41. Conclusion
+# 35. Conclusion
 
 CalibrationCompass explores a practical problem in real-world quantum computing:
 
 > **Given a circuit and multiple imperfect quantum processors, how can we make a better execution choice using the hardware information available right now?**
 
-The project demonstrates that:
+The project shows that:
 
 ```text
 Circuit structure
@@ -1239,8 +1210,8 @@ Candidate comparison
 Better-informed execution decisions
 ```
 
-The experimental results show that backend and mapping choices can materially affect observed quantum-circuit fidelity.
+The experimental results show that both backend choice and physical mapping can materially affect observed quantum-circuit fidelity.
 
-CalibrationCompass therefore treats quantum hardware as a **dynamic environment** rather than a fixed target.
+CalibrationCompass therefore treats the quantum processor as a **dynamic environment** rather than a fixed target.
 
 The long-term goal is to make quantum circuit execution more adaptive, explainable, and hardware-aware.
