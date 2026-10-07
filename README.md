@@ -2,23 +2,43 @@
 
 
 
-\*\*CalibrationCompass\*\* is a quantum hardware selection and mapping tool that helps determine \*\*where and how a quantum circuit should be executed\*\* based on current IBM Quantum backend calibration data.
+\## Calibration-Aware Quantum Circuit Compilation and Backend Selection
 
 
 
-Instead of compiling a circuit for a single backend, CalibrationCompass evaluates multiple available backends and candidate mappings, analyzes calibration-related risks, and recommends the most suitable execution option.
+CalibrationCompass is a quantum circuit optimization and backend-selection system designed to answer a practical question in real quantum computing:
 
 
 
-\## Problem
+> \*\*Given a quantum circuit and several available quantum backends, where should the circuit run, and which mapping should be used to give it the best chance of producing a reliable result under the current hardware conditions?\*\*
 
 
 
-Quantum hardware is not uniform.
+Instead of treating transpilation as a purely circuit-level optimization problem, CalibrationCompass considers the \*\*current calibration state of the hardware\*\*, the \*\*quality of physical qubits and connections\*\*, and the \*\*sensitivity of the circuit to different qubit mappings\*\*.
 
 
 
-Different QPUs can have different:
+The system combines live IBM Quantum backend calibration data with Qiskit transpilation to produce a calibration-aware recommendation.
+
+
+
+\---
+
+
+
+\# 1. The Problem
+
+
+
+Running a quantum circuit on real quantum hardware is not as simple as choosing the backend with the largest number of qubits.
+
+
+
+Real quantum processors are noisy and their performance changes over time.
+
+
+
+Different physical qubits can have different:
 
 
 
@@ -26,161 +46,327 @@ Different QPUs can have different:
 
 \- Gate errors
 
-\- T1 and T2 coherence times
+\- T1 relaxation times
+
+\- T2 coherence times
 
 \- Gate durations
 
-\- Calibration states
+\- Connectivity characteristics
 
-\- Physical qubit quality
+\- Calibration ages
 
 
 
-Even on the same backend, different logical-to-physical qubit mappings can produce significantly different results.
+At the same time, a logical circuit can often be mapped to the physical hardware in many different ways.
 
 
 
-A circuit that performs well on one backend or mapping may perform worse on another.
+Two transpiled versions of the \*\*same logical circuit\*\* can therefore produce significantly different hardware results.
 
 
 
-\## Our Approach
+This creates two related optimization problems:
 
 
 
-CalibrationCompass combines:
+\### Backend selection
 
 
 
-1\. \*\*Live IBM Quantum calibration data\*\*
+Which available quantum processor is currently the most suitable for the circuit?
 
-2\. \*\*Cross-backend comparison\*\*
 
-3\. \*\*Multiple transpilation candidates\*\*
 
-4\. \*\*Physical-qubit mapping analysis\*\*
+\### Mapping selection
 
-5\. \*\*Calibration-risk scoring\*\*
 
-6\. \*\*Explainable recommendations\*\*
 
-7\. \*\*Optional real QPU execution\*\*
+Once a backend is selected, which logical-to-physical qubit mapping should be used?
 
 
 
-The goal is not to claim a perfect fidelity prediction, but to provide a practical, calibration-aware recommendation before execution.
+Traditional compilation can optimize gate count, depth, routing, and hardware connectivity, but these optimizations do not necessarily identify the best backend under changing calibration conditions.
 
 
 
-\## Two-Stage Transpilation
+\---
 
 
 
-To reduce analysis time, CalibrationCompass uses a two-stage transpilation strategy.
+\# 2. Our Approach
 
 
 
-\### Stage 1: Fast screening
+CalibrationCompass evaluates candidate execution plans by combining:
 
 
 
-For each backend, several candidate mappings are generated using:
+1\. \*\*Circuit structure\*\*
 
+2\. \*\*Live backend calibration information\*\*
 
+3\. \*\*Physical qubit quality\*\*
 
-\- Optimization level 1
+4\. \*\*Two-qubit interaction exposure\*\*
 
-\- SABRE layout/routing
+5\. \*\*Readout risk\*\*
 
-\- Multiple transpiler seeds
+6\. \*\*Candidate logical-to-physical mappings\*\*
 
+7\. \*\*Calibration age\*\*
 
+8\. \*\*Qiskit transpilation results\*\*
 
-\### Stage 2: Deep refinement
 
 
+The system then ranks the available candidates and explains why a particular backend and mapping were recommended.
 
-The best candidate from each backend is then recompiled using:
 
 
+The goal is not simply:
 
-\- Optimization level 3
 
-\- The selected transpiler seed
 
+> "Find the shortest circuit."
 
 
-This reduces unnecessary high-cost transpilation while preserving candidate diversity.
 
+The goal is:
 
 
-For the current configuration:
 
+> \*\*"Find a hardware execution plan that balances circuit requirements with the current reliability of the hardware."\*\*
 
 
-\- 3 backends
 
-\- 3 fast candidates per backend
+\---
 
-\- 1 refined candidate per backend
 
-\- 12 total transpilation passes instead of 18
 
+\# 3. What Makes CalibrationCompass Different?
 
 
-\## System Flow
+
+IBM and Qiskit already provide sophisticated transpilation and routing techniques.
+
+
+
+CalibrationCompass focuses on a different layer of the problem.
+
+
+
+Instead of assuming that the backend is already chosen, CalibrationCompass asks:
+
+
+
+> \*\*Which backend and candidate mapping should we choose before execution?\*\*
+
+
+
+The project therefore explores:
+
+
+
+\### Cross-backend selection
+
+
+
+Different processors can have substantially different performance for the same circuit.
+
+
+
+\### Calibration-aware selection
+
+
+
+Hardware quality changes over time, so a decision based only on static topology or qubit count can become outdated.
+
+
+
+\### Mapping sensitivity
+
+
+
+Different SABRE transpiler seeds can generate different physical mappings for the same circuit.
+
+
+
+\### Explainability
+
+
+
+The system reports the physical qubits, two-qubit connections, calibration age, and calibration-related risk behind a recommendation.
+
+
+
+\### Real hardware validation
+
+
+
+The project was tested against live IBM Quantum hardware rather than relying only on simulator results.
+
+
+
+\---
+
+
+
+\# 4. System Architecture
+
+
+
+The overall workflow is:
 
 
 
 ```text
 
-Quantum Circuit
+&#x20;                        ┌──────────────────────┐
 
-&#x20;     |
+&#x20;                        │   User Quantum       │
 
-&#x20;     v
+&#x20;                        │      Circuit         │
 
-Circuit Analysis
+&#x20;                        └──────────┬───────────┘
 
-&#x20;     |
+&#x20;                                   │
 
-&#x20;     v
+&#x20;                                   ▼
 
-Live Backend Calibration Data
+&#x20;                        ┌──────────────────────┐
 
-&#x20;     |
+&#x20;                        │ Circuit Analysis     │
 
-&#x20;     v
+&#x20;                        │                      │
 
-Fast Candidate Screening
+&#x20;                        │ Qubits               │
 
-&#x20;     |
+&#x20;                        │ Depth                │
 
-&#x20;     v
+&#x20;                        │ 2Q Gates             │
 
-Best Candidate per Backend
+&#x20;                        │ Circuit structure    │
 
-&#x20;     |
+&#x20;                        └──────────┬───────────┘
 
-&#x20;     v
+&#x20;                                   │
 
-Deep Transpilation Refinement
+&#x20;                                   ▼
 
-&#x20;     |
+&#x20;             ┌────────────────────────────────────────┐
 
-&#x20;     v
+&#x20;             │       IBM Quantum Backends             │
 
-Calibration-Risk Analysis
+&#x20;             │                                        │
 
-&#x20;     |
+&#x20;             │ ibm\_fez                               │
 
-&#x20;     v
+&#x20;             │ ibm\_kingston                          │
 
-Recommended Backend + Mapping
+&#x20;             │ ibm\_marrakesh                         │
 
-&#x20;     |
+&#x20;             └───────────────┬────────────────────────┘
 
-&#x20;     v
+&#x20;                             │
 
-Optional IBM Quantum Execution
+&#x20;                             ▼
+
+&#x20;                ┌────────────────────────────┐
+
+&#x20;                │ Live Calibration Data      │
+
+&#x20;                │                            │
+
+&#x20;                │ Readout error              │
+
+&#x20;                │ Gate error                 │
+
+&#x20;                │ T1                         │
+
+&#x20;                │ T2                         │
+
+&#x20;                │ Gate duration              │
+
+&#x20;                │ Calibration age            │
+
+&#x20;                └──────────────┬─────────────┘
+
+&#x20;                               │
+
+&#x20;                               ▼
+
+&#x20;                ┌────────────────────────────┐
+
+&#x20;                │ Candidate Generation       │
+
+&#x20;                │                            │
+
+&#x20;                │ SABRE mappings             │
+
+&#x20;                │ Physical qubits            │
+
+&#x20;                │ 2Q interaction exposure     │
+
+&#x20;                └──────────────┬─────────────┘
+
+&#x20;                               │
+
+&#x20;                               ▼
+
+&#x20;                ┌────────────────────────────┐
+
+&#x20;                │ Two-Stage Transpilation    │
+
+&#x20;                │                            │
+
+&#x20;                │ Stage 1: fast screening    │
+
+&#x20;                │ Stage 2: deep refinement   │
+
+&#x20;                └──────────────┬─────────────┘
+
+&#x20;                               │
+
+&#x20;                               ▼
+
+&#x20;                ┌────────────────────────────┐
+
+&#x20;                │ Calibration-Aware Ranking  │
+
+&#x20;                │                            │
+
+&#x20;                │ Risk score                 │
+
+&#x20;                │ Candidate ranking          │
+
+&#x20;                │ Backend comparison         │
+
+&#x20;                └──────────────┬─────────────┘
+
+&#x20;                               │
+
+&#x20;                               ▼
+
+&#x20;                ┌────────────────────────────┐
+
+&#x20;                │ Recommendation             │
+
+&#x20;                │                            │
+
+&#x20;                │ Backend + Candidate        │
+
+&#x20;                │ Explanation                │
+
+&#x20;                └──────────────┬─────────────┘
+
+&#x20;                               │
+
+&#x20;                               ▼
+
+&#x20;                   ┌────────────────────────┐
+
+&#x20;                   │ Optional QPU Execution │
+
+&#x20;                   └────────────────────────┘
 
