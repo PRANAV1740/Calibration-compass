@@ -1,0 +1,33 @@
+﻿# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+qenv/
+env/
+
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+*.pem
+*.key
+
+# Editors and operating system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test artifacts and logs
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+*.tmp
+
+# Jupyter
+.ipynb_checkpoints/

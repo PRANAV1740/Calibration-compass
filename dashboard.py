@@ -567,14 +567,26 @@ if (
                         )
 
                         st.write(
-                            "Measurement counts:",
+                            "Measurement counts by register:",
                             result["counts"]
                         )
+
+                    elif result.get("terminal", False):
+
+                        st.error(
+                            f"QPU job finished without results. "
+                            f"Status: {result['status']}"
+                        )
+
+                        if result.get("error"):
+                            st.caption(
+                                f"IBM Runtime details: {result['error']}"
+                            )
 
                     else:
 
                         st.info(
-                            f"Job is still running: "
+                            f"Job is not finished yet. Current status: "
                             f"{result['status']}"
                         )
 

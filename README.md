@@ -877,6 +877,11 @@ A hardware recommendation is more useful when the system also shows the physical
 
 # 24. Installation
 
+## Requirements
+
+- Python 3.13 (tested locally with Python 3.13.15)
+- Git
+
 ## Clone the repository
 
 ```powershell
@@ -884,29 +889,21 @@ git clone https://github.com/PRANAV1740/Calibration-compass.git
 cd Calibration-compass
 ```
 
-## Create a virtual environment
+## Create and activate a virtual environment
 
 ```powershell
-python -m venv qenv
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
 
-Activate it in PowerShell:
+## Install dependencies
 
 ```powershell
-.\qenv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-## Install the tested dependencies
-
-The development environment used Qiskit 2.4.2.
-
-```powershell
-pip install "qiskit==2.4.2"
-pip install qiskit-aer
-pip install qiskit-ibm-runtime
-pip install qiskit-ibm-transpiler
-pip install numpy pandas scikit-learn xgboost shap matplotlib streamlit
-```
+The requirements.txt file records the direct package versions used in the tested environment.
 
 ---
 

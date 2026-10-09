@@ -11,7 +11,7 @@ print("CALIBRATIONCOMPASS - FINAL REAL HARDWARE MODEL TEST")
 print("=" * 90)
 
 
-BASE = Path(r"P:\Calibration-compass")
+BASE = Path(__file__).resolve().parent
 
 DATA_FILE = (
     BASE
