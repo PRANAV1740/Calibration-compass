@@ -4,7 +4,8 @@ Shares a single environment-configured QiskitRuntimeService with core.py so the
 IBM Quantum token only has to be supplied once (via IBM_QUANTUM_TOKEN).
 """
 
-from qiskit import QuantumCircuit, transpile
+from qiskit import transpile
+from qiskit.qasm2 import loads as qasm2_loads
 from qiskit_ibm_runtime import SamplerV2
 
 from core import get_service
@@ -21,7 +22,7 @@ def submit_to_qpu(qasm, backend_name, candidate_seed, shots=512):
     service = get_service()
 
     backend = service.backend(backend_name)
-    circuit = QuantumCircuit.from_qasm_str(qasm)
+    circuit = qasm2_loads(qasm)
 
     circuit_isa = transpile(
         circuit,
