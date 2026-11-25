@@ -11,16 +11,13 @@
 <body>
   <main class="container">
     <header class="site-header">
-      <div>
-        <h1 class="main-title">🧭 CalibrationCompass</h1>
-        <p class="subtitle">Live calibration-aware quantum backend and mapping selection</p>
+      <div class="brand">
+        <h1 class="main-title"><span class="logo">🧭</span> CalibrationCompass</h1>
+        <p class="subtitle">Live calibration-aware quantum backend &amp; mapping selection</p>
       </div>
-      <div class="backend-config">
-        <label for="apiBase">Backend URL</label>
-        <div class="backend-row">
-          <input id="apiBase" type="text" spellcheck="false" placeholder="https://your-api.onrender.com" />
-          <span id="healthDot" class="dot" title="Backend status"></span>
-        </div>
+      <div class="status-pill" id="statusPill" data-state="loading" title="Backend connection">
+        <span class="dot" id="healthDot"></span>
+        <span id="statusText">Connecting…</span>
       </div>
     </header>
 
@@ -109,7 +106,8 @@
     </div>
 
     <footer class="site-footer">
-      CalibrationCompass &middot; frontend on Vercel, backend on Render &middot; IBM Quantum
+      <span class="footer-mark">🧭 CalibrationCompass</span>
+      <span class="footer-dim">Calibration-aware backend selection, powered by live IBM&nbsp;Quantum data</span>
     </footer>
   </main>
 

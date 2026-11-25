@@ -14,19 +14,13 @@ let PRESETS = { ...FALLBACK_PRESETS };
 let BACKENDS = [...DEFAULT_BACKENDS];
 
 function getApiBase() {
-  let stored = null;
-  try { stored = localStorage.getItem("cc_api_base"); } catch (e) {}
   const configured = (window.CC_CONFIG && window.CC_CONFIG.apiBase) || "";
-  return (stored || configured || "").replace(/\/+$/, "");
-}
-
-function setApiBase(value) {
-  try { localStorage.setItem("cc_api_base", value.replace(/\/+$/, "")); } catch (e) {}
+  return configured.replace(/\/+$/, "");
 }
 
 async function api(path, options) {
   const base = getApiBase();
-  if (!base) throw new Error("Set the Backend URL first (top right).");
+  if (!base) throw new Error("Backend is not configured.");
   const res = await fetch(base + path, options);
   const text = await res.text();
   let data = null;
@@ -41,13 +35,22 @@ async function api(path, options) {
 /* ----------------------------- Elements ----------------------------- */
 
 const el = (id) => document.getElementById(id);
-const apiBaseInput = el("apiBase");
-const healthDot = el("healthDot");
 const qasmArea = el("qasm");
 const backendList = el("backendList");
 const analyzeBtn = el("analyzeBtn");
 const errorBox = el("error");
 const results = el("results");
+
+/* ----------------------------- Status badge ----------------------------- */
+
+function setStatus(state, text) {
+  const pill = el("statusPill");
+  if (pill) pill.setAttribute("data-state", state);
+  const t = el("statusText");
+  if (t) t.textContent = text;
+  const dot = el("healthDot");
+  if (dot) dot.className = "dot" + (state === "ok" ? " ok" : state === "bad" ? " bad" : "");
+}
 
 /* ----------------------------- Init ----------------------------- */
 
@@ -66,17 +69,16 @@ function renderBackendChecks() {
 }
 
 async function checkHealth() {
+  setStatus("loading", "Connecting…");
   try {
     const data = await api("/api/health", { method: "GET" });
-    healthDot.className = "dot ok";
-    healthDot.title = "Backend reachable";
+    setStatus("ok", "Live");
     if (Array.isArray(data.backends) && data.backends.length) {
       BACKENDS = data.backends;
       renderBackendChecks();
     }
   } catch (e) {
-    healthDot.className = "dot bad";
-    healthDot.title = "Backend unreachable: " + e.message;
+    setStatus("bad", "Offline");
   }
 }
 
@@ -345,16 +347,10 @@ analyzeBtn.addEventListener("click", analyze);
 el("runQpuBtn").addEventListener("click", runQpu);
 el("checkResultBtn").addEventListener("click", checkResult);
 
-apiBaseInput.addEventListener("change", async () => {
-  setApiBase(apiBaseInput.value.trim());
-  await checkHealth();
-  await loadPresets();
-});
-
 // boot
 (function init() {
-  apiBaseInput.value = getApiBase();
   qasmArea.value = FALLBACK_PRESETS.ghz;
   renderBackendChecks();
-  if (getApiBase()) { checkHealth(); loadPresets(); }
+  checkHealth();
+  loadPresets();
 })();
