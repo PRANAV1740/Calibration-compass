@@ -15,6 +15,16 @@ import math
 import os
 from datetime import datetime, timezone
 from functools import lru_cache
+from pathlib import Path
+
+# Load backend/.env into the environment for local development. On Render the
+# env vars are set in the dashboard, no .env exists, and existing env vars are
+# never overridden, so this is a no-op there.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).with_name(".env"))
+except ImportError:
+    pass
 
 import pandas as pd
 from qiskit import transpile
