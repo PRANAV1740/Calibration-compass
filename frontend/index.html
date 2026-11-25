@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CalibrationCompass</title>
+  <meta name="description" content="Live calibration-aware quantum backend and mapping selection." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧭</text></svg>" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="site-header">
+      <div>
+        <h1 class="main-title">🧭 CalibrationCompass</h1>
+        <p class="subtitle">Live calibration-aware quantum backend and mapping selection</p>
+      </div>
+      <div class="backend-config">
+        <label for="apiBase">Backend URL</label>
+        <div class="backend-row">
+          <input id="apiBase" type="text" spellcheck="false" placeholder="https://your-api.onrender.com" />
+          <span id="healthDot" class="dot" title="Backend status"></span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 1. Circuit -->
+    <section class="card">
+      <h2>1. Quantum Circuit</h2>
+      <div class="preset-row">
+        <button class="btn" data-preset="bell">Bell</button>
+        <button class="btn" data-preset="ghz">GHZ</button>
+        <button class="btn" data-preset="ring">Ring</button>
+        <label class="btn file-btn">
+          Upload .qasm
+          <input id="qasmFile" type="file" accept=".qasm" hidden />
+        </label>
+      </div>
+      <label class="field-label" for="qasm">OpenQASM 2.0</label>
+      <textarea id="qasm" spellcheck="false" rows="12"></textarea>
+    </section>
+
+    <!-- 2. Backends -->
+    <section class="card">
+      <h2>2. IBM Quantum Backends</h2>
+      <div id="backendList" class="backend-checks"></div>
+    </section>
+
+    <button id="analyzeBtn" class="btn primary full">🧭 Analyze with Live Calibration</button>
+
+    <div id="error" class="error-box" hidden></div>
+
+    <!-- Results -->
+    <div id="results" hidden>
+      <!-- 3. Circuit analysis -->
+      <section class="card">
+        <h2>3. Circuit Analysis</h2>
+        <div class="metric-row" id="circuitMetrics"></div>
+        <details class="diagram">
+          <summary>Show circuit</summary>
+          <pre id="circuitDiagram"></pre>
+        </details>
+      </section>
+
+      <!-- 4. Backend status -->
+      <section class="card" id="statusCard" hidden>
+        <h2>4. Backend Status</h2>
+        <div class="table-wrap">
+          <table id="statusTable"></table>
+        </div>
+      </section>
+
+      <!-- 5. Recommendation -->
+      <section class="card" id="recoCard" hidden>
+        <h2>5. CalibrationCompass Recommendation</h2>
+        <div class="recommendation">
+          <div class="recommendation-label">Recommended execution target</div>
+          <div class="recommendation-main" id="recoMain"></div>
+          <div id="recoQubits"></div>
+          <div>Combined calibration risk: <b id="recoRisk"></b></div>
+        </div>
+
+        <h3>Recommendation confidence</h3>
+        <div class="metric-row" id="confidenceMetrics"></div>
+        <div id="confidenceNote" class="note" hidden></div>
+
+        <div class="metric-row" id="kpiMetrics"></div>
+
+        <h3>Why this candidate?</h3>
+        <p id="whyText" class="muted"></p>
+
+        <div class="qpu-actions">
+          <button id="runQpuBtn" class="btn full">Run Recommended Candidate on IBM QPU</button>
+          <div id="jobInfo" class="note" hidden>
+            <div>Current Job ID: <code id="jobId"></code></div>
+            <button id="checkResultBtn" class="btn">Check QPU Result</button>
+          </div>
+          <div id="qpuResult" class="note" hidden></div>
+        </div>
+      </section>
+
+      <!-- Ranked candidates -->
+      <section class="card" id="rankedCard" hidden>
+        <h2>Final candidates</h2>
+        <div class="table-wrap">
+          <table id="rankedTable"></table>
+        </div>
+      </section>
+    </div>
+
+    <footer class="site-footer">
+      CalibrationCompass &middot; frontend on Vercel, backend on Render &middot; IBM Quantum
+    </footer>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
